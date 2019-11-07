@@ -1,0 +1,6 @@
+name: "Event validator"
+description: "Validates minium event data"
+
+runs:
+  using: "docker"
+  image: "Dockerfile"
