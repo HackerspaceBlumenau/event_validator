@@ -6,16 +6,26 @@ from github import Github
 
 ERROR_COMMENT = (
     "Olá! Ficamos MUITO felizes em ver seu interesse em "
-    "participar da nossa comunidade. Mas eu encontrei um "
-    "probleminha, está faltando alguns dados. Você pode dar uma "
-    "olhadinha novamente? ;)"
+    "participar da nossa comunidade. Mas eu encontrei alguns "
+    "probleminhas. Estão faltando alguns dados. Você pode dar uma "
+    "olhadinha novamente? Isso foi o que encontrei:"
 )
 
 SUCCESS_COMMENT = (
     "Que demais! Obrigado por ter enviado sua proposta de "
-    "evento. Me parece que tudo está certo! Logo logo, alguém"
-    "vai entrar em contato para definir o local e data final"
+    "evento. Me parece que tudo está certo! Logo logo, alguém "
+    "vai entrar em contato para definir o local e data definitivos. :)"
 )
+
+MISSING_DESCRIPTION_ERROR = "Está faltando a descrição"
+MISSING_DATE_ERROR = "Está faltando a data ou o formato está errado"
+MISSING_NAME_ERROR = "Está faltando o nome do palestrante"
+MISSING_EMAIL_ERROR = "Está faltando o email de contato"
+
+DESCRIPTION_LABEL = "Descrição"
+DATE_LABEL = "Data sugerida"
+NAME_LABEL = "Nome"
+EMAIL_LABEL = "Email"
 
 
 def get_access_token():
@@ -52,8 +62,12 @@ def is_first_section_line(line):
     Returns True if the line starts with the prefix of some required section
     """
     line = line.strip()
-    return line.startswith("Descrição") or line.startswith("Nome") or \
-        line.startswith("Data sugerida") or line.startswith("e-mail")
+    return (
+        line.startswith(DESCRIPTION_LABEL)
+        or line.startswith(NAME_LABEL)
+        or line.startswith(DATE_LABEL)
+        or line.startswith(EMAIL_LABEL)
+    )
 
 
 def get_sections(body):
@@ -72,8 +86,8 @@ def get_sections(body):
         if is_first_section_line(line):
             if len(section_name) > 0:
                 sections[section_name] = section.rstrip()
-            section_name = line[:line.find(":")].strip()
-            section = line[line.find(":")+1:].lstrip()
+            section_name = line[: line.find(":")].strip()
+            section = line[line.find(":") + 1 :].lstrip()
         else:
             section += line
         line = buff.readline()
@@ -82,13 +96,30 @@ def get_sections(body):
     return sections
 
 
-def has_all_required_data(event):
+def validate_data(event):
     """
     Check if the issue has all the required fields
     """
     sections = get_sections(event["issue"].get("body", ""))
-    return "Descrição" in sections and "Data sugerida" in sections and \
-        "e-mail" in sections and "Nome" in sections
+    print(sections)
+    errors = []
+    if DESCRIPTION_LABEL not in sections or (
+        DESCRIPTION_LABEL in sections and len(sections.get(DESCRIPTION_LABEL, "")) == 0
+    ):
+        errors.append(MISSING_DESCRIPTION_ERROR)
+    if DATE_LABEL not in sections or (
+        DATE_LABEL in sections and len(sections.get(DATE_LABEL, "")) == 0
+    ):
+        errors.append(MISSING_DATE_ERROR)
+    if NAME_LABEL not in sections or (
+        NAME_LABEL in sections and len(sections.get(NAME_LABEL, "")) == 0
+    ):
+        errors.append(MISSING_NAME_ERROR)
+    if EMAIL_LABEL not in sections or (
+        EMAIL_LABEL in sections and len(sections.get(EMAIL_LABEL, "")) == 0
+    ):
+        errors.append(MISSING_EMAIL_ERROR)
+    return errors
 
 
 def get_issue_number(event):
@@ -111,20 +142,19 @@ def main():
     with open(get_event_file()) as f:
         g = Github(get_access_token())
         event = json.load(f)
-        print(json.dumps(event))
         # Verifica se a issue criada possui a label evento
         if not has_event_label(event):
             print("It's not a event issue")
             return
         # Se tem a label, verifica se possui os dados minimos necessarios
-        if not has_all_required_data(event):
+        errors = validate_data(event)
+        if len(errors) > 0:
             # Missing data. Write a comment notifying the user
-            comment(g, event, ERROR_COMMENT)
-            return
+            errmsg = "\n".join(errors)
+            comment(g, event, f"{ERROR_COMMENT}\n\n{errmsg}")
         else:
             # All required data is there.
             comment(g, event, SUCCESS_COMMENT)
-            return
 
 
 if __name__ == "__main__":
